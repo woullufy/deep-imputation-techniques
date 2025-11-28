@@ -51,3 +51,47 @@ class Missingness:
         masked_img[~mask] = float("nan")
 
         return self._finalize_output(masked_img, mask, is_batched)
+
+    def block_missing(self, img, size=8):
+        x, is_batched = self._prepare_input(img)
+        B, C, H, W = x.shape
+
+        mask = torch.ones_like(x, dtype=torch.bool)
+
+        for b in range(B):
+            x0 = random.randint(0, H - size)
+            y0 = random.randint(0, W - size)
+            mask[b, :, x0:x0 + size, y0:y0 + size] = False
+
+        masked_img = x.clone()
+        masked_img[~mask] = float("nan")
+
+        return self._finalize_output(masked_img, mask, is_batched)
+
+    def row_missing(self, img, num_rows=5):
+        x, is_batched = self._prepare_input(img)
+        B, C, H, W = x.shape
+
+        rows = torch.randperm(H)[:num_rows]
+
+        mask = torch.ones_like(x, dtype=torch.bool)
+        mask[:, :, rows, :] = False
+
+        masked_img = x.clone()
+        masked_img[~mask] = float("nan")
+
+        return self._finalize_output(masked_img, mask, is_batched)
+
+    def col_missing(self, img, num_cols=5):
+        x, is_batched = self._prepare_input(img)
+        B, C, H, W = x.shape
+
+        cols = torch.randperm(W)[:num_cols]
+
+        mask = torch.ones_like(x, dtype=torch.bool)
+        mask[:, :, :, cols] = False
+
+        masked_img = x.clone()
+        masked_img[~mask] = float("nan")
+
+        return self._finalize_output(masked_img, mask, is_batched)
