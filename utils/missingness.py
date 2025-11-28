@@ -52,16 +52,22 @@ class Missingness:
 
         return self._finalize_output(masked_img, mask, is_batched)
 
-    def block_missing(self, img, size=8):
+    def block_missing(self, img, n_blocks=1, min_size=4, max_size=12, missing_rate=0.75):
         x, is_batched = self._prepare_input(img)
         B, C, H, W = x.shape
 
         mask = torch.ones_like(x, dtype=torch.bool)
 
         for b in range(B):
-            x0 = random.randint(0, H - size)
-            y0 = random.randint(0, W - size)
-            mask[b, :, x0:x0 + size, y0:y0 + size] = False
+            for _ in range(n_blocks):
+                size = random.randint(min_size, max_size)
+
+                x0 = random.randint(0, H - size) if H - size >= 0 else 0
+                y0 = random.randint(0, W - size) if W - size >= 0 else 0
+
+                temp_block_mask = torch.rand(C, size, size, device=x.device) > missing_rate
+
+                mask[b, :, x0:x0 + size, y0:y0 + size] = temp_block_mask
 
         masked_img = x.clone()
         masked_img[~mask] = float("nan")
@@ -95,3 +101,19 @@ class Missingness:
         masked_img[~mask] = float("nan")
 
         return self._finalize_output(masked_img, mask, is_batched)
+
+    def salt_pepper(self, img, amount=0.1):
+        x, is_batched = self._prepare_input(img)
+
+        out = x.clone()
+        noise = torch.rand_like(out)
+
+        pepper_mask = noise < amount / 2
+        out[pepper_mask] = torch.min(x)
+
+        salt_mask = noise > 1 - amount / 2
+        out[salt_mask] = torch.max(x)
+
+        noise_mask = pepper_mask | salt_mask
+
+        return self._finalize_output(out, noise_mask, is_batched)
