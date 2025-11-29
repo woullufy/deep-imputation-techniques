@@ -30,9 +30,8 @@ def train_autoencoder(
         for x, _ in train_loader:
             x = x.to(device)
 
-            # DAE Logic
             if missingness is not None:
-                noisy_x = missingness.apply_corruption(x, corruption_type, **corruption_kwargs)
+                noisy_x, mask = missingness.apply_corruption(x, corruption_type, **corruption_kwargs)
             else:
                 noisy_x = x
 
