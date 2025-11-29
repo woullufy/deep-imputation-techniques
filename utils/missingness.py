@@ -117,3 +117,24 @@ class Missingness:
         noise_mask = pepper_mask | salt_mask
 
         return self._finalize_output(out, noise_mask, is_batched)
+
+    def apply_corruption(self, x, corruption_type, **kwargs):
+        is_flat = x.dim() == 2
+        if is_flat:
+            B, L = x.shape
+            side = int(L ** 0.5)
+            img = x.view(B, 1, side, side)
+        else:
+            img = x
+
+        if hasattr(self, corruption_type):
+            corruption_func = getattr(self, corruption_type)
+            noisy_img, mask = corruption_func(img, **kwargs)
+        else:
+            noisy_img, mask = img, torch.zeros_like(img, dtype=torch.bool)
+
+        if is_flat:
+            noisy_img = noisy_img.view(B, -1)
+            mask = mask.view(B, -1)
+
+        return noisy_img, mask
