@@ -47,7 +47,7 @@ def run_dec_pipeline(
 
     train_dec(
         model=dec,
-        train_loader=imputed_loader,
+        train_loader=dec_loader,
         optimizer=dec_optimizer,
         loss_fn=dec_loss_fn,
         tensor_x=imputed_tensor_x,
