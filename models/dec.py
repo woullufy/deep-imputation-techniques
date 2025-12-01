@@ -5,7 +5,7 @@ from sklearn.cluster import KMeans
 
 
 class DEC(nn.Module):
-    def __init__(self, autoencoder, num_clusters, latent_dim, alpha=1.0):
+    def __init__(self, autoencoder, num_clusters=10, latent_dim=10, alpha=1.0):
         super(DEC, self).__init__()
         self.encoder = autoencoder.encoder
         self.num_clusters = num_clusters
@@ -24,7 +24,7 @@ class DEC(nn.Module):
         u_norm_sq = torch.sum(self.cluster_centers ** 2, dim=1).unsqueeze(0)
         dist_sq = z_norm_sq + u_norm_sq - 2 * torch.matmul(z, self.cluster_centers.t())
 
-        # Student's t-distribution)
+        # Student's t-distribution
         q = torch.pow(1.0 + dist_sq / self.alpha, -(self.alpha + 1.0) / 2.0)
 
         # Normalize for the probability dist

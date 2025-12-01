@@ -59,6 +59,7 @@ def train_autoencoder(
 
             model.train()
 
-        print(f"Epoch {epoch}/{epochs}: average loss = {epoch_loss:.4f}")
+        if epoch % 10 == 0 or epoch == epochs:
+            print(f"Epoch {epoch}/{epochs}: average loss = {epoch_loss:.4f}")
 
     return (losses, images) if image_indices is not None else losses
