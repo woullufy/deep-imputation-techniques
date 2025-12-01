@@ -45,8 +45,10 @@ def plot_ae_reconstructions(
         dataset,
         device='cpu',
         missingness=None,
+        title=None,
         corruption_type="mcar",
-        **corruption_kwargs
+        **corruption_kwargs,
+
 ):
     model.eval()
 
@@ -103,6 +105,9 @@ def plot_ae_reconstructions(
         plt.imshow(recons[i], cmap=cmap)
         ax.set_title("Reconstructed")
         plt.axis("off")
+
+    if title is not None:
+        plt.suptitle(title, fontsize=20)
 
     plt.tight_layout()
     plt.show()
