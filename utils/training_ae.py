@@ -32,6 +32,8 @@ def train_autoencoder(
 
             if missingness is not None:
                 noisy_x, mask = missingness.apply_corruption(x, corruption_type, **corruption_kwargs)
+                # noisy_x = torch.nan_to_num(noisy_x, nan=0.0)
+                noisy_x = noisy_x.to(device)
             else:
                 noisy_x = x
 
