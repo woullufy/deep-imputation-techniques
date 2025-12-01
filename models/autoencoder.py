@@ -30,7 +30,7 @@ class Autoencoder(nn.Module):
         if x.dim() > 2:
             x = x.view(x.size(0), -1)
 
-        x = torch.nan_to_num(x, nan=1.0)
+        x = torch.nan_to_num(x, nan=0.0)
 
         z = self.encoder(x)
         x_hat = self.decoder(z)

@@ -4,7 +4,9 @@ from .training_dec import train_dec
 from .imputer import knn_impute_image, mean_impute_image
 from .missingness import Missingness
 from .pipeline import run_dec_pipeline
-from .plotting import plot_dec_performance
+from .plotting import (plot_dec_performance,
+                       plot_ae_losses,
+                       plot_ae_reconstructions)
 
 __all__ = [
     'load_mnist',
@@ -18,5 +20,8 @@ __all__ = [
     'Missingness',
 
     'run_dec_pipeline',
+
     'plot_dec_performance',
+    'plot_ae_losses',
+    'plot_ae_reconstructions'
 ]

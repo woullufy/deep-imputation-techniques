@@ -2,7 +2,12 @@ import matplotlib.pyplot as plt
 import torch
 
 
-def plot_dec_performance(missingness_percentages, score_arrays, labels, title):
+def plot_dec_performance(
+        missingness_percentages,
+        score_arrays,
+        labels,
+        title
+):
     plt.figure(figsize=(10, 6))
 
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
@@ -38,21 +43,15 @@ def plot_dec_performance(missingness_percentages, score_arrays, labels, title):
 def plot_ae_reconstructions(
         model,
         dataset,
-        n=10,
-        device=None,
-        indices=None,
+        device='cpu',
         missingness=None,
         corruption_type="mcar",
         **corruption_kwargs
 ):
     model.eval()
-    if device is None:
-        device = next(model.parameters()).device
 
-    if indices is None:
-        indices = torch.randint(0, len(dataset), size=(n,))
-    else:
-        n = len(indices)
+    indices = get_one_index_per_label(dataset)
+    n = len(indices)
 
     originals = []
     corrupteds = []
@@ -85,7 +84,7 @@ def plot_ae_reconstructions(
 
     rows = 3
     cols = n
-    plt.figure(figsize=(2.5 * n, 6))
+    plt.figure(figsize=(2.2 * n, 6))
 
     for i in range(n):
         ax = plt.subplot(rows, cols, i + 1)
@@ -107,3 +106,84 @@ def plot_ae_reconstructions(
 
     plt.tight_layout()
     plt.show()
+
+
+def plot_all_reconstructions(images_dict):
+    n_images = len(images_dict)
+    n_recons = max(len(v["reconstructions"]) for v in images_dict.values())
+
+    fig, axes = plt.subplots(
+        n_images,
+        n_recons + 1,
+        figsize=(3 * (n_recons + 1), 3 * n_images)
+    )
+
+    if n_images == 1:
+        axes = axes.reshape(1, -1)
+
+    for row_idx, (img_index, data) in enumerate(images_dict.items()):
+
+        # Original image
+        original = data["original"].detach().cpu().squeeze()
+        original = original.view(28, 28)
+        axes[row_idx, 0].imshow(original, cmap="gray")
+        axes[row_idx, 0].set_title(f"Original (idx={img_index})")
+        axes[row_idx, 0].axis("off")
+
+        # All the reconstructions
+        for col_idx in range(n_recons):
+            ax = axes[row_idx, col_idx + 1]
+
+            if col_idx < len(data["reconstructions"]):
+                x_hat = data["reconstructions"][col_idx]
+
+                if x_hat.dim() == 2:
+                    img = x_hat.view(28, 28)
+                else:
+                    img = x_hat.squeeze()
+
+                img = img.detach().cpu()
+
+                ax.imshow(img, cmap="gray")
+                ax.set_title(f"Epoch {col_idx + 1}")
+            else:
+                ax.axis("off")
+
+            ax.axis("off")
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_ae_losses(ae_losses, title=None):
+    plt.figure(figsize=(8, 5))
+
+    plt.plot(
+        range(1, len(ae_losses) + 1),
+        ae_losses,
+        linewidth=2,
+    )
+
+    plt.xlabel("Epoch", fontsize=12)
+    plt.ylabel("MSE Loss", fontsize=12)
+    plt.title(title, fontsize=14)
+
+    plt.grid(True, linestyle="--", alpha=0.6)
+
+    plt.tight_layout()
+    plt.show()
+
+
+def get_one_index_per_label(dataset):
+    indices = [-1] * 10
+
+    for idx in range(len(dataset)):
+        _, label = dataset[idx]
+
+        if indices[label] == -1:
+            indices[label] = idx
+
+        if all(i != -1 for i in indices):
+            break
+
+    return indices

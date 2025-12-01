@@ -32,7 +32,7 @@ def train_autoencoder(
 
             if missingness is not None:
                 noisy_x, mask = missingness.apply_corruption(x, corruption_type, **corruption_kwargs)
-                noisy_x = torch.nan_to_num(noisy_x, nan=0.0)
+                # noisy_x = torch.nan_to_num(noisy_x, nan=0.0)
                 noisy_x = noisy_x.to(device)
             else:
                 noisy_x = x
@@ -61,7 +61,7 @@ def train_autoencoder(
 
             model.train()
 
-        if epoch % 10 == 0 or epoch == epochs:
+        if epoch % 5 == 0 or epoch == epochs:
             print(f"Epoch {epoch}/{epochs}: average loss = {epoch_loss:.4f}")
 
     return (losses, images) if image_indices is not None else losses
