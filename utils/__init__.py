@@ -3,10 +3,11 @@ from .data_loader import (
     load_fashion_mnist,
     get_raw_data,
 )
-
+from .helpers import get_device
 from .imputer import KNNImageImputer, MeanImageImputer
 from .missingness import Missingness
 from .pipeline import run_dec_pipeline
+
 from .plotting import (
     plot_dec_performance,
     plot_ae_losses,
@@ -18,17 +19,19 @@ from .training_dec import train_dec
 __all__ = [
     'load_mnist',
     'load_fashion_mnist',
+    'get_raw_data',
 
     'train_autoencoder',
     'train_dec',
+    'run_dec_pipeline',
 
     'KNNImageImputer',
     'MeanImageImputer',
     'Missingness',
 
-    'run_dec_pipeline',
-
     'plot_dec_performance',
     'plot_ae_losses',
-    'plot_ae_reconstructions'
+    'plot_ae_reconstructions',
+
+    'get_device',
 ]
