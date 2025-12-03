@@ -1,4 +1,9 @@
-from .data_loader import load_mnist, load_fashion_mnist
+from .data_loader import (
+    load_mnist,
+    load_fashion_mnist,
+    get_raw_data,
+)
+
 from .imputer import KNNImageImputer, MeanImageImputer
 from .missingness import Missingness
 from .pipeline import run_dec_pipeline
