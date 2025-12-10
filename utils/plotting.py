@@ -45,7 +45,7 @@ def plot_experiment_results(
         ari_scores_mean, ari_scores_knn, ari_scores_dae,
         nmi_scores_mean, nmi_scores_knn, nmi_scores_dae
 ):
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(18, 6))
 
     # ---------------- ARI ---------------- #
     plt.subplot(1, 2, 1)
@@ -56,7 +56,8 @@ def plot_experiment_results(
     plt.title("ARI vs Missing Rate", fontsize=14)
     plt.xlabel("Missing Rate (%)", fontsize=12)
     plt.ylabel("ARI", fontsize=12)
-    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.xticks(list(range(0, 100, 10)))
     plt.legend()
 
     # ---------------- NMI ---------------- #
@@ -68,7 +69,8 @@ def plot_experiment_results(
     plt.title("NMI vs Missing Rate", fontsize=14)
     plt.xlabel("Missing Rate (%)", fontsize=12)
     plt.ylabel("NMI", fontsize=12)
-    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.xticks(list(range(0, 100, 10)))
     plt.legend()
 
     plt.tight_layout()
