@@ -40,6 +40,41 @@ def plot_dec_performance(
     plt.show()
 
 
+def plot_experiment_results(
+        missing_rates,
+        ari_scores_mean, ari_scores_knn, ari_scores_dae,
+        nmi_scores_mean, nmi_scores_knn, nmi_scores_dae
+):
+    plt.figure(figsize=(12, 6))
+
+    # ---------------- ARI ---------------- #
+    plt.subplot(1, 2, 1)
+    plt.plot(missing_rates, ari_scores_mean, label="Mean Imputer", marker='o')
+    plt.plot(missing_rates, ari_scores_knn, label="kNN Imputer", marker='o')
+    plt.plot(missing_rates, ari_scores_dae, label="DAE", marker='o')
+
+    plt.title("ARI vs Missing Rate", fontsize=14)
+    plt.xlabel("Missing Rate (%)", fontsize=12)
+    plt.ylabel("ARI", fontsize=12)
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.legend()
+
+    # ---------------- NMI ---------------- #
+    plt.subplot(1, 2, 2)
+    plt.plot(missing_rates, nmi_scores_mean, label="Mean Imputer", marker='o')
+    plt.plot(missing_rates, nmi_scores_knn, label="kNN Imputer", marker='o')
+    plt.plot(missing_rates, nmi_scores_dae, label="DAE", marker='o')
+
+    plt.title("NMI vs Missing Rate", fontsize=14)
+    plt.xlabel("Missing Rate (%)", fontsize=12)
+    plt.ylabel("NMI", fontsize=12)
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.legend()
+
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_ae_reconstructions(
         model,
         dataset,

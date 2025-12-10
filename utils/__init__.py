@@ -11,7 +11,8 @@ from .pipeline import run_dec_pipeline
 from .plotting import (
     plot_dec_performance,
     plot_ae_losses,
-    plot_ae_reconstructions
+    plot_ae_reconstructions,
+    plot_experiment_results,
 )
 from .training_ae import train_autoencoder
 from .training_dec import train_dec
@@ -32,6 +33,7 @@ __all__ = [
     'plot_dec_performance',
     'plot_ae_losses',
     'plot_ae_reconstructions',
+    'plot_experiment_results',
 
     'get_device',
 ]
