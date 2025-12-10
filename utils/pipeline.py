@@ -14,8 +14,6 @@ def run_dec_pipeline(
         y_true,
         data_indices,
         missingness=None,
-        missing_rate=0.0,
-        corruption_type='mcar',
         imputer=None,
         device='cpu',
         ae_epochs=20,
@@ -23,17 +21,17 @@ def run_dec_pipeline(
         n_clusters=10,
         latent_dim=10,
         n_features=784,
+        **corruption_kwargs,
 ):
     # ----- Corrupting clean data -----
-    if missingness is not None and missing_rate > 0:
-        print(f'\tCorrupting data ({corruption_type} | {missing_rate:.2f})')
-        X_corrupted_flat, _ = missingness.apply_corruption(
-            X_clean,
-            corruption_type=corruption_type,
-            missing_rate=missing_rate
-        )
+    missing_rate = corruption_kwargs.get("missing_rate", 0)
+    corruption_type = corruption_kwargs.get("corruption_type", "mcar")
+
+    print(f"Corruption settings ({corruption_type} | {missing_rate:.2f})")
+
+    if imputer is not None and missing_rate > 0:
+        X_corrupted_flat, _ = missingness.apply_corruption(X_clean, **corruption_kwargs)
     else:
-        print('\tNo corruption applied')
         X_corrupted_flat = X_clean.clone()
 
     # ----- Impute into corrupted data -----
@@ -69,8 +67,9 @@ def run_dec_pipeline(
         optimizer=ae_optimizer,
         loss_fn=ae_loss_fn,
         epochs=ae_epochs,
-        missingness=None,
-        device=device
+        missingness=missingness if imputer is None else None,
+        device=device,
+        **corruption_kwargs,
     )
 
     # ----- DEC training -----

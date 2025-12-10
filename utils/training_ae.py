@@ -8,7 +8,6 @@ def train_autoencoder(
         loss_fn,
         epochs=10,
         missingness=None,
-        corruption_type='mcar',
         image_indices=None,
         device="cpu",
         **corruption_kwargs
@@ -31,7 +30,7 @@ def train_autoencoder(
             x = x.to(device)
 
             if missingness is not None:
-                noisy_x, mask = missingness.apply_corruption(x, corruption_type, **corruption_kwargs)
+                noisy_x, mask = missingness.apply_corruption(x, **corruption_kwargs)
                 # noisy_x = torch.nan_to_num(noisy_x, nan=0.0)
                 noisy_x = noisy_x.to(device)
             else:
