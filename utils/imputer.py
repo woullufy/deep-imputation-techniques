@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 
+import numpy as np
 import torch
+from sklearn.mixture import GaussianMixture
 
 
 class ImputerStrategy(ABC):
@@ -77,4 +79,65 @@ class KNNImageImputer(ImputerStrategy):
 
         out_channel = channel.clone()
         out_channel[mask_nan] = imputed_vals
+        return out_channel
+
+
+class GMMImageImputer(ImputerStrategy):
+    def __init__(self, n_components=10, ink_threshold=0.5):
+        self.n_components = n_components
+        self.ink_threshold = ink_threshold
+        self.model = None
+
+    def impute(self, img: torch.Tensor) -> torch.Tensor:
+        x = img.clone()
+        if x.dim() == 3:  # C, H, W
+            C = x.size(0)
+            for c in range(C):
+                x[c] = self._spatial_gmm_2d(x[c])
+        elif x.dim() == 4:  # B, C, H, W
+            B, C = x.size(0), x.size(1)
+            for b in range(B):
+                for c in range(C):
+                    x[b, c] = self._spatial_gmm_2d(x[b, c])
+        return x
+
+    def _spatial_gmm_2d(self, channel: torch.Tensor) -> torch.Tensor:
+        device = channel.device
+
+        img_np = channel.detach().cpu().numpy()
+        H, W = img_np.shape
+
+        mask_nan = np.isnan(img_np)
+
+        if not mask_nan.any():
+            return channel
+
+        y_valid, x_valid = np.where((img_np > self.ink_threshold) & ~mask_nan)
+        X_train = np.column_stack([x_valid, y_valid])
+
+        if X_train.shape[0] < self.n_components:
+            zeros = torch.zeros_like(channel)
+            return zeros
+
+        self.model = GaussianMixture(n_components=self.n_components, covariance_type='full')
+        self.model.fit(X_train)
+
+        y_missing, x_missing = np.where(mask_nan)
+
+        if len(y_missing) == 0:
+            return channel
+
+        X_missing = np.column_stack([x_missing, y_missing])
+
+        log_density = self.model.score_samples(X_missing)
+        density = np.exp(log_density)
+
+        log_density_train = self.model.score_samples(X_train)
+        ref_density = np.percentile(np.exp(log_density_train), 80)
+
+        imputed_vals_np = np.clip(density / (ref_density + 1e-10), 0, 1)
+
+        out_channel = channel.clone()
+        vals_tensor = torch.from_numpy(imputed_vals_np).to(dtype=channel.dtype, device=device)
+        out_channel[mask_nan] = vals_tensor
         return out_channel
