@@ -82,8 +82,8 @@ class KNNImageImputer(ImputerStrategy):
         return out_channel
 
 
-class GMMImageImputer(ImputerStrategy):
-    def __init__(self, n_components=10, ink_threshold=0.5):
+class SklearnGMMImageImputer(ImputerStrategy):
+    def __init__(self, n_components=10, ink_threshold=0.1):
         self.n_components = n_components
         self.ink_threshold = ink_threshold
         self.model = None
@@ -133,7 +133,7 @@ class GMMImageImputer(ImputerStrategy):
         density = np.exp(log_density)
 
         log_density_train = self.model.score_samples(X_train)
-        ref_density = np.percentile(np.exp(log_density_train), 80)
+        ref_density = np.percentile(np.exp(log_density_train), 50)
 
         imputed_vals_np = np.clip(density / (ref_density + 1e-10), 0, 1)
 
