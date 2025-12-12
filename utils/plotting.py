@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 
 
@@ -40,15 +41,60 @@ def plot_dec_performance(
     plt.show()
 
 
+def plot_dec_performance_average(
+        missingness_percentages,
+        score_arrays,
+        labels,
+        title='DEC Clustering Performance (All Metrics)'
+):
+    colors = ['blue', 'green', 'red']
+
+    plt.figure(figsize=(10, 6))
+
+    for i, (runs, label) in enumerate(zip(score_arrays, labels)):
+        runs = np.array(runs)
+        mean_curve = runs.mean(axis=0)
+        std_curve = runs.std(axis=0)
+
+        # Shaded region
+        plt.fill_between(
+            missingness_percentages,
+            mean_curve - std_curve,
+            mean_curve + std_curve,
+            alpha=0.2,
+            color=colors[i]
+        )
+
+        # Mean curve
+        plt.plot(
+            missingness_percentages,
+            mean_curve,
+            label=f"{label} (mean ± std)",
+            color=colors[i],
+            marker='o',
+            linewidth=2
+        )
+
+    plt.title(title, fontsize=16)
+    plt.xlabel("Missingness Level", fontsize=14)
+    plt.ylabel("Score", fontsize=14)
+    plt.xticks(missingness_percentages)
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.legend(fontsize=12)
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_experiment_results(
         missing_rates,
         ari_scores_mean, ari_scores_knn, ari_scores_dae,
-        nmi_scores_mean, nmi_scores_knn, nmi_scores_dae
+        nmi_scores_mean, nmi_scores_knn, nmi_scores_dae,
+        acc_scores_mean, acc_scores_knn, acc_scores_dae
 ):
-    plt.figure(figsize=(18, 6))
+    plt.figure(figsize=(26, 6))
 
     # ---------------- ARI ---------------- #
-    plt.subplot(1, 2, 1)
+    plt.subplot(1, 3, 1)
     plt.plot(missing_rates, ari_scores_mean, label="Mean Imputer", marker='o')
     plt.plot(missing_rates, ari_scores_knn, label="kNN Imputer", marker='o')
     plt.plot(missing_rates, ari_scores_dae, label="DAE", marker='o')
@@ -61,7 +107,7 @@ def plot_experiment_results(
     plt.legend()
 
     # ---------------- NMI ---------------- #
-    plt.subplot(1, 2, 2)
+    plt.subplot(1, 3, 2)
     plt.plot(missing_rates, nmi_scores_mean, label="Mean Imputer", marker='o')
     plt.plot(missing_rates, nmi_scores_knn, label="kNN Imputer", marker='o')
     plt.plot(missing_rates, nmi_scores_dae, label="DAE", marker='o')
@@ -73,8 +119,102 @@ def plot_experiment_results(
     plt.xticks(list(range(0, 100, 10)))
     plt.legend()
 
+    # ---------------- ACCURACY ---------------- #
+    plt.subplot(1, 3, 3)
+    plt.plot(missing_rates, acc_scores_mean, label="Mean Imputer", marker='o')
+    plt.plot(missing_rates, acc_scores_knn, label="kNN Imputer", marker='o')
+    plt.plot(missing_rates, acc_scores_dae, label="DAE", marker='o')
+
+    plt.title("Accuracy vs Missing Rate", fontsize=14)
+    plt.xlabel("Missing Rate (%)", fontsize=12)
+    plt.ylabel("Accuracy", fontsize=12)
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.xticks(list(range(0, 100, 10)))
+    plt.legend()
+
     plt.tight_layout()
     plt.show()
+
+
+def plot_experiment_results_average(
+        missingness_levels,
+        ari_runs_mean, ari_runs_knn, ari_runs_dae,
+        nmi_runs_mean, nmi_runs_knn, nmi_runs_dae,
+        acc_runs_mean, acc_runs_knn, acc_runs_dae,
+        title="DEC Performance Across Imputation Methods"
+):
+    plt.figure(figsize=(26, 6))
+
+    method_colors = {
+        "Mean": "blue",
+        "kNN": "green",
+        "DAE": "red"
+    }
+
+    # ARI
+    plt.subplot(1, 3, 1)
+    _plot_metric_mean_std(
+        missingness_levels,
+        [ari_runs_mean, ari_runs_knn, ari_runs_dae],
+        ["Mean", "kNN", "DAE"],
+        [method_colors["Mean"], method_colors["kNN"], method_colors["DAE"]],
+        "ARI"
+    )
+
+    # NMI
+    plt.subplot(1, 3, 2)
+    _plot_metric_mean_std(
+        missingness_levels,
+        [nmi_runs_mean, nmi_runs_knn, nmi_runs_dae],
+        ["Mean", "kNN", "DAE"],
+        [method_colors["Mean"], method_colors["kNN"], method_colors["DAE"]],
+        "NMI"
+    )
+
+    # ACC
+    plt.subplot(1, 3, 3)
+    _plot_metric_mean_std(
+        missingness_levels,
+        [acc_runs_mean, acc_runs_knn, acc_runs_dae],
+        ["Mean", "kNN", "DAE"],
+        [method_colors["Mean"], method_colors["kNN"], method_colors["DAE"]],
+        "Accuracy"
+    )
+
+    plt.suptitle(title, fontsize=20)
+    plt.tight_layout()
+    plt.show()
+
+
+def _plot_metric_mean_std(x_values, metric_runs, labels, colors, metric_name):
+    for runs, label, color in zip(metric_runs, labels, colors):
+        runs = np.array(runs)
+        mean_curve = runs.mean(axis=0)
+        std_curve = runs.std(axis=0)
+
+        plt.fill_between(
+            x_values,
+            mean_curve - std_curve,
+            mean_curve + std_curve,
+            alpha=0.25,
+            color=color
+        )
+
+        plt.plot(
+            x_values,
+            mean_curve,
+            color=color,
+            marker="o",
+            linewidth=2,
+            label=f"{label} (mean ± std)"
+        )
+
+    plt.title(metric_name, fontsize=16)
+    plt.xlabel("Missingness (%)", fontsize=14)
+    plt.ylabel(metric_name, fontsize=14)
+    plt.xticks(x_values)
+    plt.grid(True, linestyle="--", alpha=0.4)
+    plt.legend()
 
 
 def plot_ae_reconstructions(

@@ -26,14 +26,16 @@ def run_dec_pipeline(
         **corruption_kwargs,
 ):
     # ----- Corrupting clean data -----
-    missing_rate = corruption_kwargs.get("missing_rate", 0)
-    corruption_type = corruption_kwargs.get("corruption_type", "mcar")
+    corruption_type = corruption_kwargs.get("corruption_type")
+    value = corruption_kwargs.get("missing_rate", 0)
+    value = corruption_kwargs.get("num_rows", 0)
 
-    print(f"Corruption settings ({corruption_type} | {missing_rate:.2f})")
+    print(f"Corruption settings ({corruption_type} | {value:.2f})")
 
-    if imputer is not None and missing_rate > 0:
+    if (imputer is not None) and (missingness is not None):
         X_corrupted_flat, _ = missingness.apply_corruption(X_clean, **corruption_kwargs)
     else:
+        print("\tNo corruption applied")
         X_corrupted_flat = X_clean.clone()
 
     # ----- Impute into corrupted data -----

@@ -7,7 +7,7 @@ from .helpers import get_device
 from .imputer import (
     KNNImageImputer,
     MeanImageImputer,
-    GMMImageImputer,
+    SklearnGMMImageImputer,
 )
 from .missingness import Missingness
 from .pipeline import run_dec_pipeline
@@ -17,6 +17,8 @@ from .plotting import (
     plot_ae_losses,
     plot_ae_reconstructions,
     plot_experiment_results,
+    plot_dec_performance_average,
+    plot_experiment_results_average,
 )
 from .training_ae import train_autoencoder
 from .training_dec import train_dec
@@ -32,13 +34,16 @@ __all__ = [
 
     'KNNImageImputer',
     'MeanImageImputer',
-    'GMMImageImputer',
+    'SklearnGMMImageImputer',
+
     'Missingness',
 
     'plot_dec_performance',
     'plot_ae_losses',
     'plot_ae_reconstructions',
     'plot_experiment_results',
+    'plot_dec_performance_average',
+    'plot_experiment_results_average',
 
     'get_device',
 ]
