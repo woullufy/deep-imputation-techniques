@@ -141,3 +141,168 @@ class SklearnGMMImageImputer(ImputerStrategy):
         vals_tensor = torch.from_numpy(imputed_vals_np).to(dtype=channel.dtype, device=device)
         out_channel[mask_nan] = vals_tensor
         return out_channel
+
+
+class BatchedSpatialGMM:
+    def init(self, n_components=10, n_iters=25, tol=1e-3, reg_covar=1e-4):
+        self.K = n_components
+        self.n_iters = n_iters
+        self.tol = tol
+        self.reg_covar = reg_covar
+
+    def fit(self, X, mask=None):
+        B, N, D = X.shape
+        device = X.device
+
+        if mask is None:
+            mask = torch.ones(B, N, device=device)
+
+        rand_vals = torch.rand(B, N, device=device) * mask
+        _, top_k_idx = torch.topk(rand_vals, self.K, dim=1)
+
+        batch_idx = torch.arange(B, device=device).unsqueeze(1)
+        self.mu = X[batch_idx, top_k_idx]  # (B, K, 2)
+
+        valid_counts = mask.sum(dim=1).view(B, 1, 1) + 1e-10
+        global_mean = (X * mask.unsqueeze(-1)).sum(dim=1, keepdim=True) / valid_counts
+        global_var = ((X - global_mean) ** 2 * mask.unsqueeze(-1)).sum(dim=1, keepdim=True) / valid_counts
+
+        avg_var = global_var.mean(dim=-1, keepdim=True).unsqueeze(-1)  # (B, 1, 1, 1)
+
+        # Initialize Sigma
+        eye = torch.eye(D, device=device).view(1, 1, D, D)
+        self.sigma = eye * avg_var
+        self.sigma = self.sigma.expand(B, self.K, D, D).clone()
+
+        self.pi = torch.ones(B, self.K, device=device) / self.K
+
+        # --- EM Loop ---
+        for i in range(self.n_iters):
+            log_resp = self._estimate_log_prob(X)
+            log_resp = log_resp + torch.log(mask.unsqueeze(-1) + 1e-10)
+
+            log_prob_norm = torch.logsumexp(log_resp, dim=2, keepdim=True)
+            resp = torch.exp(log_resp - log_prob_norm)  # (B, N, K)
+            resp = resp * mask.unsqueeze(-1)
+
+            # M-Step
+            N_k = resp.sum(dim=1) + 1e-10
+            self.pi = N_k / N_k.sum(dim=1, keepdim=True)
+            self.mu = torch.bmm(resp.transpose(1, 2), X) / N_k.unsqueeze(-1)
+
+            diff = X.unsqueeze(2) - self.mu.unsqueeze(1)
+            sigma_new = torch.einsum('bnk,bnki,bnkj->bkij', resp, diff, diff)
+            sigma_new = sigma_new / N_k.unsqueeze(-1).unsqueeze(-1)
+
+            eye = torch.eye(D, device=device).expand(B, self.K, D, D)
+            self.sigma = sigma_new + self.reg_covar * eye
+
+    def predict_density(self, X):
+        log_prob = self._estimate_log_prob(X)
+        return torch.exp(torch.logsumexp(log_prob, dim=2))
+
+    def _estimate_log_prob(self, X):
+        B, N, _ = X.shape
+        D = 2
+        X_exp = X.unsqueeze(2)
+        mu_exp = self.mu.unsqueeze(1)
+        diff = X_exp - mu_exp
+
+        precision = torch.linalg.inv(self.sigma)
+        log_det = torch.logdet(self.sigma)
+
+        diff_prec = torch.einsum('bnki,bkij->bnkj', diff, precision)
+        mahalanobis = (diff_prec * diff).sum(dim=-1)
+
+        log_2pi = D * np.log(2 * np.pi)
+        log_prob = -0.5 * (log_2pi + log_det.unsqueeze(1) + mahalanobis)
+
+        return log_prob + torch.log(self.pi.unsqueeze(1) + 1e-10)
+
+
+class TESTImputer(ImputerStrategy):
+    def init(self, n_components=10, ink_threshold=0.1, n_iters=25):
+        self.n_components = n_components
+        self.ink_threshold = ink_threshold
+        self.n_iters = n_iters
+
+    def impute(self, img: torch.Tensor) -> torch.Tensor:
+        x = img.clone()
+        original_dim = x.dim()
+        if original_dim == 2:
+            x = x.unsqueeze(0)
+        elif original_dim == 4:
+            B, C, H, W = x.shape
+            x = x.view(B * C, H, W)
+
+        imputed_batch = self._impute_batch(x)
+
+        if original_dim == 2:
+            return imputed_batch.squeeze(0)
+        elif original_dim == 4:
+            return imputed_batch.view(B, C, H, W)
+        return imputed_batch
+
+    def _impute_batch(self, imgs: torch.Tensor) -> torch.Tensor:
+        B, H, W = imgs.shape
+        device = imgs.device
+
+        mask_nan = torch.isnan(imgs)
+        mask_valid = ~mask_nan & (imgs > self.ink_threshold)
+
+        batch_idx, y_coord, x_coord = torch.where(mask_valid)
+        counts = torch.bincount(batch_idx, minlength=B)
+        max_points = counts.max().item()
+
+        if max_points < self.n_components:
+            return torch.nan_to_num(imgs, 0.0)
+
+        X_train = torch.zeros(B, max_points, 2, device=device)
+        train_mask = torch.zeros(B, max_points, device=device)
+
+        for b in range(B):
+            valid_b = torch.stack([x_coord[batch_idx == b], y_coord[batch_idx == b]], dim=1)
+            n_p = valid_b.shape[0]
+            if n_p > 0:
+                X_train[b, :n_p] = valid_b.float()
+                train_mask[b, :n_p] = 1.0
+
+        model = BatchedSpatialGMM(n_components=self.n_components, n_iters=self.n_iters)
+        model.fit(X_train, mask=train_mask)
+
+        batch_idx_m, y_m, x_m = torch.where(mask_nan)
+        counts_m = torch.bincount(batch_idx_m, minlength=B)
+        max_missing = counts_m.max().item()
+
+        if max_missing == 0: return imgs
+
+        X_missing = torch.zeros(B, max_missing, 2, device=device)
+        # missing_mask = torch.zeros(B, max_missing, device=device) # Unused but harmless
+
+        for b in range(B):
+            miss_b = torch.stack([x_m[batch_idx_m == b], y_m[batch_idx_m == b]], dim=1)
+            n_m = miss_b.shape[0]
+            if n_m > 0:
+                X_missing[b, :n_m] = miss_b.float()
+
+        densities = model.predict_density(X_missing)
+        train_densities = model.predict_density(X_train)
+
+        masked_densities = train_densities.clone()
+        masked_densities[train_mask == 0] = float('nan')
+        ref_density = torch.nanquantile(masked_densities, 0.5, dim=1)
+        ref_density[torch.isnan(ref_density)] = 1.0
+
+        imputed_vals = densities / (ref_density.unsqueeze(1) + 1e-10)
+        imputed_vals = torch.clamp(imputed_vals, 0, 1)
+
+        out_imgs = imgs.clone()
+        for b in range(B):
+            n_m = counts_m[b]
+            if n_m > 0:
+                y_locs = y_m[batch_idx_m == b]
+                x_locs = x_m[batch_idx_m == b]
+                vals = imputed_vals[b, :n_m]
+                out_imgs[b, y_locs, x_locs] = vals.type(imgs.dtype)
+
+        return out_imgs
