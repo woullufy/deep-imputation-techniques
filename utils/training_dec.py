@@ -6,7 +6,7 @@ def train_dec(
         train_loader,
         optimizer,
         loss_fn,
-        tensor_x,  # TODO solve this nicely
+        tensor_x,
         epochs=10,
         device="cpu",
 ):
@@ -19,8 +19,7 @@ def train_dec(
     for epoch in range(1, epochs + 1):
         epoch_loss = 0
 
-        # In the original paper target distribution P is updated every T iterations
-        # Here we are updating target distribution P on full dataset, once per epoch
+        # Updating target distribution P on full dataset once per epoch
         with torch.no_grad():
             q_full, _ = model(tensor_x)
             p_full = target_distribution(q_full)

@@ -93,7 +93,7 @@ def plot_experiment_results(
 ):
     plt.figure(figsize=(26, 6))
 
-    # ---------------- ARI ---------------- #
+    # ARI
     plt.subplot(1, 3, 1)
     plt.plot(missing_rates, ari_scores_mean, label="Mean Imputer", marker='o')
     plt.plot(missing_rates, ari_scores_knn, label="kNN Imputer", marker='o')
@@ -106,7 +106,7 @@ def plot_experiment_results(
     plt.xticks(list(range(0, 100, 10)))
     plt.legend()
 
-    # ---------------- NMI ---------------- #
+    # NMI
     plt.subplot(1, 3, 2)
     plt.plot(missing_rates, nmi_scores_mean, label="Mean Imputer", marker='o')
     plt.plot(missing_rates, nmi_scores_knn, label="kNN Imputer", marker='o')
@@ -119,7 +119,7 @@ def plot_experiment_results(
     plt.xticks(list(range(0, 100, 10)))
     plt.legend()
 
-    # ---------------- ACCURACY ---------------- #
+    # ACC
     plt.subplot(1, 3, 3)
     plt.plot(missing_rates, acc_scores_mean, label="Mean Imputer", marker='o')
     plt.plot(missing_rates, acc_scores_knn, label="kNN Imputer", marker='o')

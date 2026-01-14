@@ -2,6 +2,9 @@ from .data_loader import (
     load_mnist,
     load_fashion_mnist,
     get_raw_data,
+    load_iris,
+    load_penguins,
+    load_gaussian,
 )
 from .helpers import get_device
 from .imputer import (
@@ -9,7 +12,7 @@ from .imputer import (
     MeanImageImputer,
     SklearnGMMImageImputer,
 )
-from .missingness import Missingness
+from .missingness import ImageMissingness, TabularMissingness
 from .pipeline import run_dec_pipeline
 
 from .plotting import (
@@ -36,7 +39,8 @@ __all__ = [
     'MeanImageImputer',
     'SklearnGMMImageImputer',
 
-    'Missingness',
+    'ImageMissingness',
+    'TabularMissingness',
 
     'plot_dec_performance',
     'plot_ae_losses',

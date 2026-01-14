@@ -1,8 +1,11 @@
-import torch
 import random
 
+import numpy as np
+import pandas as pd
+import torch
 
-class Missingness:
+
+class ImageMissingness:
     def _prepare_input(self, img):
         is_batched = img.dim() == 4
         if not is_batched:
@@ -138,3 +141,73 @@ class Missingness:
             mask = mask.view(B, -1)
 
         return noisy_img, mask
+
+
+class TabularMissingness:
+    def _prepare_input(self, data):
+        is_df = isinstance(data, pd.DataFrame)
+        df = data.copy() if is_df else pd.DataFrame(data)
+        return df, is_df
+
+    def _finalize_output(self, df, is_df):
+        return df if is_df else df.to_numpy()
+
+    def mcar(self, data, frac=0.1, columns=None, random_state=None):
+        rng = np.random.default_rng(random_state)
+        df, is_df = self._prepare_input(data)
+
+        if columns is None:
+            mask = rng.random(df.shape) < frac
+            df = df.mask(mask)
+        else:
+            cols = [columns] if isinstance(columns, (str, int)) else columns
+            for col in cols:
+                mask = rng.random(len(df)) < frac
+                df.loc[mask, col] = np.nan
+        return self._finalize_output(df, is_df)
+
+    def mar(self, data, frac=0.1, dep_col=None, miss_col=None, random_state=None):
+        rng = np.random.default_rng(random_state)
+        df, is_df = self._prepare_input(data)
+
+        if dep_col is None or miss_col is None:
+            raise ValueError("Dependent column and missing columns cannot be None")
+
+        names = list(df.columns)
+        d_idx = [names.index(x) if isinstance(x, str) else x for x in
+                 ([dep_col] if isinstance(dep_col, (str, int)) else dep_col)]
+        m_idx = [names.index(x) if isinstance(x, str) else x for x in
+                 ([miss_col] if isinstance(miss_col, (str, int)) else miss_col)]
+
+        score = df.iloc[:, d_idx].rank(method="average").mean(axis=1)
+        high_mask = score > score.median()
+
+        for col in m_idx:
+            p = frac.get(col, 0.1) if isinstance(frac, dict) else frac
+            mask = high_mask & (rng.random(len(df)) < p)
+            df.iloc[mask.values, col] = np.nan
+        return self._finalize_output(df, is_df)
+
+    def mnar(self, data, frac=0.1, random_state=None):
+        rng = np.random.default_rng(random_state)
+        df, is_df = self._prepare_input(data)
+
+        for col in df.columns:
+            mask = (df[col] > df[col].median()) & (rng.random(len(df)) < frac)
+            df.loc[mask, col] = np.nan
+        return self._finalize_output(df, is_df)
+
+    def apply_stratified(self, X, y, method="mcar", **kwargs):
+        df, is_df = self._prepare_input(X)
+        chunks = []
+
+        for label in np.unique(y):
+            subset = df.iloc[y == label].copy()
+            out = getattr(self, method)(subset, **kwargs)
+
+            if isinstance(out, np.ndarray):
+                out = pd.DataFrame(out, index=subset.index, columns=df.columns)
+            chunks.append(out)
+
+        res = pd.concat(chunks).sort_index()
+        return self._finalize_output(res, is_df)
