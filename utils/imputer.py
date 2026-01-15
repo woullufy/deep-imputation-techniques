@@ -1,18 +1,20 @@
 from abc import ABC, abstractmethod
 
 import numpy as np
+import pandas as pd
 import torch
+from scipy.spatial.distance import cdist
 from sklearn.mixture import GaussianMixture
 
 
 class ImputerStrategy(ABC):
     @abstractmethod
-    def impute(self, x: torch.Tensor) -> torch.Tensor:
+    def impute(self, x):
         pass
 
 
 class MeanImageImputer(ImputerStrategy):
-    def impute(self, img: torch.Tensor) -> torch.Tensor:
+    def impute(self, img):
         x = img.clone()
         if x.dim() == 3:  # C, H, W
             C = x.size(0)
@@ -36,7 +38,7 @@ class KNNImageImputer(ImputerStrategy):
     def __init__(self, k=3):
         self.k = k
 
-    def impute(self, img: torch.Tensor) -> torch.Tensor:
+    def impute(self, img):
         x = img.clone()
         if x.dim() == 3:
             C = x.size(0)
@@ -88,7 +90,7 @@ class SklearnGMMImageImputer(ImputerStrategy):
         self.ink_threshold = ink_threshold
         self.model = None
 
-    def impute(self, img: torch.Tensor) -> torch.Tensor:
+    def impute(self, img):
         x = img.clone()
         if x.dim() == 3:  # C, H, W
             C = x.size(0)
@@ -101,7 +103,7 @@ class SklearnGMMImageImputer(ImputerStrategy):
                     x[b, c] = self._spatial_gmm_2d(x[b, c])
         return x
 
-    def _spatial_gmm_2d(self, channel: torch.Tensor) -> torch.Tensor:
+    def _spatial_gmm_2d(self, channel):
         device = channel.device
 
         img_np = channel.detach().cpu().numpy()
@@ -191,7 +193,7 @@ class BatchedSpatialGMM:
             self.mu = torch.bmm(resp.transpose(1, 2), X) / N_k.unsqueeze(-1)
 
             diff = X.unsqueeze(2) - self.mu.unsqueeze(1)
-            sigma_new = torch.einsum('bnk,bnki,bnkj->bkij', resp, diff, diff)
+            sigma_new = torch.einsum('bnk,bnki,bnkjbkij', resp, diff, diff)
             sigma_new = sigma_new / N_k.unsqueeze(-1).unsqueeze(-1)
 
             eye = torch.eye(D, device=device).expand(B, self.K, D, D)
@@ -211,7 +213,7 @@ class BatchedSpatialGMM:
         precision = torch.linalg.inv(self.sigma)
         log_det = torch.logdet(self.sigma)
 
-        diff_prec = torch.einsum('bnki,bkij->bnkj', diff, precision)
+        diff_prec = torch.einsum('bnki,bkijbnkj', diff, precision)
         mahalanobis = (diff_prec * diff).sum(dim=-1)
 
         log_2pi = D * np.log(2 * np.pi)
@@ -226,7 +228,7 @@ class TESTImputer(ImputerStrategy):
         self.ink_threshold = ink_threshold
         self.n_iters = n_iters
 
-    def impute(self, img: torch.Tensor) -> torch.Tensor:
+    def impute(self, img):
         x = img.clone()
         original_dim = x.dim()
         if original_dim == 2:
@@ -243,7 +245,7 @@ class TESTImputer(ImputerStrategy):
             return imputed_batch.view(B, C, H, W)
         return imputed_batch
 
-    def _impute_batch(self, imgs: torch.Tensor) -> torch.Tensor:
+    def _impute_batch(self, imgs):
         B, H, W = imgs.shape
         device = imgs.device
 
@@ -277,7 +279,6 @@ class TESTImputer(ImputerStrategy):
         if max_missing == 0: return imgs
 
         X_missing = torch.zeros(B, max_missing, 2, device=device)
-        # missing_mask = torch.zeros(B, max_missing, device=device) # Unused but harmless
 
         for b in range(B):
             miss_b = torch.stack([x_m[batch_idx_m == b], y_m[batch_idx_m == b]], dim=1)
@@ -306,3 +307,66 @@ class TESTImputer(ImputerStrategy):
                 out_imgs[b, y_locs, x_locs] = vals.type(imgs.dtype)
 
         return out_imgs
+
+
+class MeanTabularImputer(ImputerStrategy):
+    def impute(self, x):
+        if isinstance(x, pd.DataFrame):
+            return x.fillna(x.mean())
+
+        out = np.copy(x)
+        col_means = np.nanmean(out, axis=0)
+        col_means = np.nan_to_num(col_means, nan=0.0)
+
+        inds = np.where(np.isnan(out))
+        out[inds] = np.take(col_means, inds[1])
+        return out
+
+
+class MedianTabularImputer(ImputerStrategy):
+    def impute(self, x):
+        if isinstance(x, pd.DataFrame):
+            return x.fillna(x.median())
+
+        out = np.copy(x)
+        col_medians = np.nanmedian(out, axis=0)
+        col_medians = np.nan_to_num(col_medians, nan=0.0)
+
+        inds = np.where(np.isnan(out))
+        out[inds] = np.take(col_medians, inds[1])
+        return out
+
+
+class KNNTabularImputer(ImputerStrategy):
+    def __init__(self, k=3):
+        self.k = k
+
+    def impute(self, x):
+        is_df = isinstance(x, pd.DataFrame)
+        data = x.to_numpy() if is_df else np.copy(x)
+
+        mask = np.isnan(data)
+        has_nan = mask.any(axis=1)
+        if not has_nan.any():
+            return x
+
+        col_means = np.nanmean(data, axis=0)
+        col_means = np.nan_to_num(col_means, nan=0.0)
+        ref_data = np.where(mask, col_means, data)
+
+        valid_rows = ref_data[~has_nan]
+        if len(valid_rows) == 0:
+            return pd.DataFrame(ref_data, columns=x.columns) if is_df else ref_data
+
+        nan_indices = np.where(has_nan)[0]
+        for i in nan_indices:
+            row = ref_data[i:i + 1]
+            distances = cdist(row, valid_rows, metric='euclidean')[0]
+
+            k_neighbors = np.argpartition(distances, min(self.k, len(distances) - 1))[:self.k]
+
+            missing_cols = mask[i]
+            neighbor_values = valid_rows[k_neighbors][:, missing_cols]
+            data[i, missing_cols] = np.mean(neighbor_values, axis=0)
+
+        return pd.DataFrame(data, index=x.index, columns=x.columns) if is_df else data

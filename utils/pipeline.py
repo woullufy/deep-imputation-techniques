@@ -1,12 +1,11 @@
-import numpy as np
 import torch
-from scipy.optimize import linear_sum_assignment
 from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 from torch import optim
 from torch.nn import KLDivLoss, MSELoss
 from torch.utils.data import TensorDataset, DataLoader
 
 from models import Autoencoder, DEC
+from utils import clustering_accuracy
 from .training_ae import train_autoencoder
 from .training_dec import train_dec
 
@@ -105,18 +104,3 @@ def run_dec_pipeline(
 
     print(f'Result: ARI={ari:.4f} | NMI={nmi:.4f} | ACC={acc:.4f}')
     return ari, nmi, acc
-
-
-def clustering_accuracy(y_true, y_pred):
-    y_true = np.asarray(y_true)
-    y_pred = np.asarray(y_pred)
-
-    D = max(y_pred.max(), y_true.max()) + 1
-    cost_matrix = np.zeros((D, D), dtype=int)
-
-    for i in range(len(y_true)):
-        cost_matrix[y_pred[i], y_true[i]] += 1
-
-    row_ind, col_ind = linear_sum_assignment(cost_matrix.max() - cost_matrix)
-    accuracy = cost_matrix[row_ind, col_ind].sum() / len(y_true)
-    return accuracy

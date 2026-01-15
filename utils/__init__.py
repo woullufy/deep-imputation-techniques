@@ -6,11 +6,18 @@ from .data_loader import (
     load_penguins,
     load_gaussian,
 )
-from .helpers import get_device
+from .helpers import (
+    get_device,
+    clustering_accuracy,
+    random_covariance_matrix
+)
 from .imputer import (
     KNNImageImputer,
     MeanImageImputer,
     SklearnGMMImageImputer,
+    MedianTabularImputer,
+    MeanTabularImputer,
+    KNNTabularImputer,
 )
 from .missingness import ImageMissingness, TabularMissingness
 from .pipeline import run_dec_pipeline
@@ -38,6 +45,9 @@ __all__ = [
     'KNNImageImputer',
     'MeanImageImputer',
     'SklearnGMMImageImputer',
+    'MedianTabularImputer',
+    'MeanTabularImputer',
+    'KNNTabularImputer',
 
     'ImageMissingness',
     'TabularMissingness',
@@ -50,4 +60,6 @@ __all__ = [
     'plot_experiment_results_average',
 
     'get_device',
+    'clustering_accuracy',
+    'random_covariance_matrix'
 ]
