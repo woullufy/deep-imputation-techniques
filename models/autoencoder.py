@@ -36,3 +36,32 @@ class Autoencoder(nn.Module):
         x_hat = self.decoder(z)
 
         return x_hat, z
+
+
+class TabularAutoencoder(nn.Module):
+    def __init__(self, input_dim, latent_dim=2):
+        super().__init__()
+
+        hidden_dim = max(3, input_dim - 1)
+
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, latent_dim),
+
+            nn.BatchNorm1d(latent_dim)
+        )
+
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, input_dim)
+        )
+
+    def forward(self, x):
+        x = torch.nan_to_num(x, nan=0.0)
+
+        z = self.encoder(x)
+        x_hat = self.decoder(z)
+
+        return x_hat, z

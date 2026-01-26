@@ -16,10 +16,11 @@ class DEC(nn.Module):
         if x.dim() > 2:
             x = x.view(x.size(0), -1)
 
+
+        x = torch.nan_to_num(x, nan=0.0)
+
         z = self.encoder(x)
 
-        # Efficient calculation of squared Euclidean distance
-        # ||z - u||^2 = ||z||^2 + ||u||^2 - 2*z*uT
         z_norm_sq = torch.sum(z ** 2, dim=1, keepdim=True)
         u_norm_sq = torch.sum(self.cluster_centers ** 2, dim=1).unsqueeze(0)
         dist_sq = z_norm_sq + u_norm_sq - 2 * torch.matmul(z, self.cluster_centers.t())
@@ -40,6 +41,10 @@ class DEC(nn.Module):
             for x, y in dataloader:
                 # x = batch[0].to(device)
                 x = x.to(device)
+
+
+                x = torch.nan_to_num(x, nan=0.0)
+
                 z = self.encoder(x)
                 features.append(z.cpu().numpy())
 

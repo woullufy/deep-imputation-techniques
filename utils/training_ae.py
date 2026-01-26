@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 
 
@@ -64,3 +65,51 @@ def train_autoencoder(
             print(f"Epoch {epoch}/{epochs}: average loss = {epoch_loss:.4f}")
 
     return (losses, images) if image_indices is not None else losses
+
+
+def train_tabular_autoencoder(
+        model,
+        train_loader,
+        optimizer,
+        loss_fn,
+        epochs=100,
+        device="cpu",
+        # missingness=None,
+        # **corruption_kwargs
+):
+    model.to(device)
+    model.train()
+    losses = []
+
+    for epoch in range(1, epochs + 1):
+        epoch_loss = 0
+
+        for x, _ in train_loader:
+            x = x.to(device)
+
+            # if missingness is not None:
+            #     x_np = x_clean.detach().cpu().numpy()
+            #
+            #     y_dummy = np.zeros(x_np.shape[0])
+            #     x_corrupted = missingness.apply_stratified(x_np, y_dummy, **corruption_kwargs)
+            #
+            #     inputs = torch.from_numpy(x_corrupted).float().to(device)
+            # else:
+            #     inputs = x_clean
+
+            x_hat, z = model(x)
+            loss = loss_fn(x_hat, x)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            epoch_loss += loss.item() * x.size(0)
+
+        avg_epoch_loss = epoch_loss / len(train_loader.dataset)
+        losses.append(avg_epoch_loss)
+
+        if epoch % 50 == 0 or epoch == epochs:
+            print(f"AE Epoch {epoch:03d}/{epochs}: Loss = {avg_epoch_loss:.6f}")
+
+    return losses

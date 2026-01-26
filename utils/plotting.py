@@ -1,6 +1,11 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from scipy.optimize import linear_sum_assignment
+from sklearn.decomposition import PCA
+from sklearn.metrics.cluster import contingency_matrix
+
+from models.gmm import GMMMissing
 
 
 def plot_dec_performance(
@@ -41,11 +46,11 @@ def plot_dec_performance(
     plt.show()
 
 
-def plot_dec_performance_average(
+def plot_performance_average(
         missingness_percentages,
         score_arrays,
         labels,
-        title='DEC Clustering Performance (All Metrics)'
+        title='Clustering Performance (All Metrics)'
 ):
     colors = ['blue', 'green', 'red']
 
@@ -56,7 +61,6 @@ def plot_dec_performance_average(
         mean_curve = runs.mean(axis=0)
         std_curve = runs.std(axis=0)
 
-        # Shaded region
         plt.fill_between(
             missingness_percentages,
             mean_curve - std_curve,
@@ -65,7 +69,6 @@ def plot_dec_performance_average(
             color=colors[i]
         )
 
-        # Mean curve
         plt.plot(
             missingness_percentages,
             mean_curve,
@@ -75,17 +78,23 @@ def plot_dec_performance_average(
             linewidth=2
         )
 
+    # max_val = missingness_percentages.max()
+    # step = 5 if max_val <= 30 else 10
+    #
+    # ticks = np.arange(0, max_val + 1e-9, step)
+    # plt.xticks(ticks)
+
     plt.title(title, fontsize=16)
     plt.xlabel("Missingness Level", fontsize=14)
     plt.ylabel("Score", fontsize=14)
-    plt.xticks(missingness_percentages)
+    # plt.xticks(missingness_percentages)
     plt.grid(True, linestyle="--", alpha=0.5)
     plt.legend(fontsize=12)
     plt.tight_layout()
     plt.show()
 
 
-def plot_experiment_results(
+def plot_dec_experiment_results(
         missing_rates,
         ari_scores_mean, ari_scores_knn, ari_scores_dae,
         nmi_scores_mean, nmi_scores_knn, nmi_scores_dae,
@@ -186,6 +195,33 @@ def plot_experiment_results_average(
     plt.show()
 
 
+def plot_experiment_results(
+        missingness_levels,
+        results,
+        title="Clustering Performance Across Missing-Data Strategies"
+):
+    plt.figure(figsize=(6 * len(results), 6))
+
+    metrics = ["ARI", "NMI", "ACC"]
+    colors = plt.cm.tab10.colors
+
+    for i, metric in enumerate(metrics, start=1):
+        plt.subplot(1, 3, i)
+
+        for (method, method_results), color in zip(results.items(), colors):
+            _plot_metric_mean_std(
+                missingness_levels,
+                [method_results[metric]],
+                [method],
+                [color],
+                metric
+            )
+
+    plt.suptitle(title, fontsize=20)
+    plt.tight_layout()
+    plt.show()
+
+
 def _plot_metric_mean_std(x_values, metric_runs, labels, colors, metric_name):
     for runs, label, color in zip(metric_runs, labels, colors):
         runs = np.array(runs)
@@ -212,7 +248,7 @@ def _plot_metric_mean_std(x_values, metric_runs, labels, colors, metric_name):
     plt.title(metric_name, fontsize=16)
     plt.xlabel("Missingness (%)", fontsize=14)
     plt.ylabel(metric_name, fontsize=14)
-    plt.xticks(x_values)
+    # plt.xticks(x_values)
     plt.grid(True, linestyle="--", alpha=0.4)
     plt.legend()
 
@@ -369,3 +405,116 @@ def get_one_index_per_label(dataset):
             break
 
     return indices
+
+
+def plot_imputation_and_alignment(X, y, n_classes, missing):
+    gmm = GMMMissing(n_components=n_classes, random_state=42)
+    gmm.fit(missing)
+
+    prediction = gmm.predict(missing)
+    imputed = gmm.impute(missing, stochastic=True)
+
+    cm = contingency_matrix(y, prediction)
+    row_ind, col_ind = linear_sum_assignment(cm.max() - cm)
+    mapping = {col: row for row, col in zip(row_ind, col_ind)}
+    aligned_predictions = np.array([mapping[p] for p in prediction])
+    errors = aligned_predictions != y
+
+    is_imputed = np.isnan(missing).any(axis=1)
+
+    use_pca = X.shape[1] > 2
+
+    if use_pca:
+        pca = PCA(n_components=2, random_state=42)
+        X_plot = pca.fit_transform(X)
+        imputed_plot = pca.transform(imputed)
+        x_label, y_label = "PC 1", "PC 2"
+    else:
+        X_plot = X
+        imputed_plot = imputed
+        x_label, y_label = "Feature 0", "Feature 1"
+
+    fig, ax = plt.subplots(2, 2, figsize=(10, 8))
+
+    ax[0, 0].scatter(X_plot[:, 0], X_plot[:, 1], c=y, s=30, alpha=0.7, cmap="viridis")
+    ax[0, 0].set_title("Original Data (Ground Truth)")
+    ax[0, 1].scatter(imputed_plot[:, 0], imputed_plot[:, 1], c=is_imputed, s=30, alpha=0.6, cmap="autumn")
+    ax[0, 1].set_title("Imputed Data (Yellow = Filled)")
+    ax[1, 0].scatter(imputed_plot[:, 0], imputed_plot[:, 1], c=aligned_predictions, s=30, alpha=0.7, cmap="viridis")
+    ax[1, 0].set_title("Aligned Predictions (Mapped to True Class)")
+    ax[1, 1].scatter(imputed_plot[:, 0], imputed_plot[:, 1], c=errors, s=30, alpha=0.7, cmap="coolwarm")
+    ax[1, 1].set_title("Clustering Errors (Red = Misclassified)")
+
+    for a in ax.flat:
+        a.set_xlabel(x_label)
+        a.set_ylabel(y_label)
+        a.grid(True, linestyle="--", alpha=0.5)
+
+    fig.tight_layout()
+    plt.show()
+
+
+def plot_latent_space(model, tensor_x, y_true, device='cpu'):
+    model.eval()
+
+    with torch.no_grad():
+        _, z = model(tensor_x.to(device))
+        z = z.cpu().numpy()
+
+    if z.shape[1] > 2:
+        pca = PCA(n_components=2)
+        z_plot = pca.fit_transform(z)
+        print('Using PCA')
+    else:
+        z_plot = z
+
+    plt.figure(figsize=(9, 6))
+    scatter = plt.scatter(
+        z_plot[:, 0], z_plot[:, 1],
+        c=y_true, cmap='viridis',
+        s=45, alpha=0.8, edgecolors='white', linewidth=0.5
+    )
+
+    plt.colorbar(scatter, label='Class Label')
+    plt.title(f"Autoencoder: Latent Space Representation", fontsize=13, pad=15)
+    # plt.xlabel("Dimension 1")
+    # plt.ylabel("Dimension 2")
+    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_reconstruction_comparison(model, tensor_x, y_true, device='cpu'):
+    model.eval()
+    with torch.no_grad():
+        x_hat, _ = model(tensor_x.to(device))
+        x_hat = x_hat.cpu().numpy()
+
+    X_orig = tensor_x.cpu().numpy()
+
+    pca = PCA(n_components=2)
+
+    z_orig = pca.fit_transform(X_orig)
+    z_hat = pca.fit_transform(x_hat)
+
+    z_orig = X_orig
+    z_hat = x_hat
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharex=True, sharey=True)
+
+    scatter1 = axes[0].scatter(z_orig[:, 0], z_orig[:, 1], c=y_true, cmap='viridis', s=40, alpha=0.7)
+    axes[0].set_title("Original Data (PCA Projection)", fontsize=14)
+    axes[0].set_xlabel("PC1")
+    axes[0].set_ylabel("PC2")
+    axes[0].grid(True, linestyle='--', alpha=0.5)
+
+    scatter2 = axes[1].scatter(z_hat[:, 0], z_hat[:, 1], c=y_true, cmap='viridis', s=40, alpha=0.7)
+    axes[1].set_title("AE Reconstructed Data (PCA Projection)", fontsize=14)
+    axes[1].set_xlabel("PC1")
+    axes[1].grid(True, linestyle='--', alpha=0.5)
+
+    cbar = fig.colorbar(scatter1, ax=axes, orientation='vertical', fraction=.02, pad=0.04)
+    cbar.set_label('Species Class')
+
+    plt.suptitle("Original vs Reconstructed", fontsize=16)
+    plt.show()

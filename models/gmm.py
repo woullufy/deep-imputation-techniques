@@ -1,5 +1,6 @@
 import numpy as np
-from scipy.linalg import cholesky, solve_triangular, inv
+from numpy.linalg import solve
+from scipy.linalg import cholesky, solve_triangular
 from scipy.special import logsumexp
 from sklearn.cluster import KMeans
 
@@ -166,9 +167,16 @@ class GMMMissing:
                 x = X[i]
                 missing = np.isnan(x)
                 obs = ~missing
+                n_obs = np.sum(obs)
 
-                if not np.any(obs):
-                    log_p_xo = -0.5 * n_features * np.log(2 * np.pi)
+                # Fully missing
+                if n_obs == 0:
+                    log_p_xo = 0.0
+
+                    x_exp = mu_k.copy()
+                    cov_exp = sigma_k.copy()
+
+                #  Partially observed
                 else:
                     mu_o = mu_k[obs]
                     Sigma_oo = sigma_k[np.ix_(obs, obs)]
@@ -178,29 +186,27 @@ class GMMMissing:
                     sol = solve_triangular(L, diff, lower=True)
                     dist = np.sum(sol ** 2)
                     log_det = 2 * np.sum(np.log(np.diag(L)))
-                    log_p_xo = -0.5 * (dist + log_det + len(mu_o) * np.log(2 * np.pi))
+                    log_p_xo = -0.5 * (dist + log_det + n_obs * np.log(2 * np.pi))
+
+                    if not np.any(missing):
+                        x_exp = x
+                        cov_exp = np.zeros((n_features, n_features))
+                    else:
+                        mu_m = mu_k[missing]
+                        Sigma_mo = sigma_k[np.ix_(missing, obs)]
+                        Sigma_mm = sigma_k[np.ix_(missing, missing)]
+
+                        reg_mo = solve(Sigma_oo, Sigma_mo.T).T
+
+                        cond_mean_m = mu_m + reg_mo @ (x[obs] - mu_o)
+                        cond_cov_m = Sigma_mm - reg_mo @ Sigma_mo.T
+
+                        x_exp = x.copy()
+                        x_exp[missing] = cond_mean_m
+                        cov_exp = np.zeros((n_features, n_features))
+                        cov_exp[np.ix_(missing, missing)] = cond_cov_m
 
                 log_weighted_probs[i, k] = log_p_xo + np.log(self.pi_[k])
-
-                if not np.any(missing):
-                    x_exp = x
-                    cov_exp = np.zeros((n_features, n_features))
-                else:
-                    mu_m = mu_k[missing]
-                    Sigma_mo = sigma_k[np.ix_(missing, obs)]
-                    Sigma_mm = sigma_k[np.ix_(missing, missing)]
-
-                    inv_Sigma_oo = inv(Sigma_oo)
-                    reg_mo = Sigma_mo @ inv_Sigma_oo
-
-                    cond_mean_m = mu_m + reg_mo @ (x[obs] - mu_o)
-                    cond_cov_m = Sigma_mm - reg_mo @ Sigma_mo.T
-
-                    x_exp = x.copy()
-                    x_exp[missing] = cond_mean_m
-                    cov_exp = np.zeros((n_features, n_features))
-                    cov_exp[np.ix_(missing, missing)] = cond_cov_m
-
                 exp_X[i, k] = x_exp
                 exp_XX[i, k] = np.outer(x_exp, x_exp) + cov_exp
 
@@ -247,35 +253,36 @@ class GMMMissing:
     def impute(self, X, stochastic=True):
         X = np.asarray(X, dtype=float)
         X_imputed = X.copy()
-
         resp, _, _, _ = self._e_step(X)
         n_samples, n_features = X.shape
 
         for i in range(n_samples):
             x = X[i]
             missing = np.isnan(x)
-            if not np.any(missing):
-                continue
+            if not np.any(missing): continue
 
             k = self.rng.choice(self.K, p=resp[i])
-
-            mu_k = self.mu_[k]
-            sigma_k = self.sigma_[k]
+            mu_k, sigma_k = self.mu_[k], self.sigma_[k]
             obs = ~missing
 
-            mu_o, mu_m = mu_k[obs], mu_k[missing]
-            Sigma_oo = sigma_k[np.ix_(obs, obs)]
-            Sigma_mo = sigma_k[np.ix_(missing, obs)]
-            Sigma_mm = sigma_k[np.ix_(missing, missing)]
-
-            reg_coeff = np.linalg.solve(Sigma_oo, Sigma_mo.T).T
-            cond_mean = mu_m + reg_coeff @ (x[obs] - mu_o)
-
-            if stochastic:
-                cond_cov = Sigma_mm - reg_coeff @ Sigma_mo.T
-                cond_cov += 1e-9 * np.eye(cond_cov.shape[0])
-                X_imputed[i, missing] = self.rng.multivariate_normal(cond_mean, cond_cov)
+            if np.sum(obs) == 0:
+                if stochastic:
+                    X_imputed[i] = self.rng.multivariate_normal(mu_k, sigma_k)
+                else:
+                    X_imputed[i] = mu_k
             else:
-                X_imputed[i, missing] = cond_mean
+                mu_o, mu_m = mu_k[obs], mu_k[missing]
+                Sigma_oo = sigma_k[np.ix_(obs, obs)]
+                Sigma_mo = sigma_k[np.ix_(missing, obs)]
+                Sigma_mm = sigma_k[np.ix_(missing, missing)]
 
+                reg_coeff = solve(Sigma_oo, Sigma_mo.T).T
+                cond_mean = mu_m + reg_coeff @ (x[obs] - mu_o)
+
+                if stochastic:
+                    cond_cov = Sigma_mm - reg_coeff @ Sigma_mo.T
+                    cond_cov += 1e-9 * np.eye(cond_cov.shape[0])
+                    X_imputed[i, missing] = self.rng.multivariate_normal(cond_mean, cond_cov)
+                else:
+                    X_imputed[i, missing] = cond_mean
         return X_imputed
